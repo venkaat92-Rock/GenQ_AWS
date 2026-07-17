@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+*.duckdb
+.pytest_cache/
+data/
+ui/node_modules/
+# api/static/ is COMMITTED in this repo: App Runner's Python runtime has no
+# Node, so the UI is prebuilt locally (cd ui && npm run build) and shipped.
+ui/*.tsbuildinfo

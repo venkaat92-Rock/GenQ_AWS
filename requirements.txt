@@ -1,0 +1,12 @@
+duckdb>=1.0
+pm4py>=2.7
+pandas>=2.0
+pyyaml>=6.0
+fastapi>=0.115
+uvicorn[standard]>=0.30
+python-multipart>=0.0.9
+anthropic[vertex,bedrock]>=0.40
+openpyxl>=3.1
+python-docx>=1.1
+pdfplumber>=0.11
+pillow>=10.0

@@ -1,0 +1,13 @@
+Procurement intake process notes, workshop 3 June.
+
+Requester: Submit a purchase request with the item details and cost estimate.
+Requester: Attach three vendor quotes when the value is above 5000 dollars.
+Procurement analyst: Review the purchase request for completeness in Coupa.
+Procurement analyst: Return incomplete requests to the requester with comments.
+Finance controller: Check the budget availability for the cost center in SAP.
+Finance controller: Approve or reject the request based on the budget check.
+Procurement analyst: Create the purchase order in SAP and send it to the vendor.
+Vendor: Confirm the purchase order and communicate the delivery date.
+Warehouse team: Receive the goods and post the goods receipt in SAP.
+Accounts payable: Match the invoice against the purchase order and goods receipt.
+Accounts payable: Release the payment according to the agreed payment terms.
