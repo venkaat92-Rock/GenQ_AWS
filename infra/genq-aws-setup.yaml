@@ -1,0 +1,164 @@
+# One-time AWS setup for GenQ_AWS on ECS Express Mode.
+#
+# Upload this in the CloudFormation console (us-west-2) -> Create stack ->
+# "Upload a template file". It creates everything the GitHub Actions deploy
+# pipeline needs:
+#   - ECR repository (genq-aws)
+#   - GitHub OIDC provider (keyless auth for GitHub Actions)
+#   - genq-github-actions-role   (assumed by the workflow: push image, deploy)
+#   - genq-task-execution-role   (pull image, write logs)
+#   - genq-task-role             (THE APP'S ROLE: bedrock:InvokeModel — no API keys)
+#   - genq-ecs-infrastructure-role (lets ECS create the ALB/networking)
+#
+# If your account ALREADY has the GitHub OIDC provider
+# (IAM -> Identity providers -> token.actions.githubusercontent.com),
+# set CreateOIDCProvider=false when creating the stack.
+AWSTemplateFormatVersion: "2010-09-09"
+Description: GenQ_AWS - ECR + IAM roles for GitHub Actions deploys to ECS Express Mode (Bedrock via task role)
+
+Parameters:
+  GitHubRepo:
+    Type: String
+    Default: venkaat92-Rock/GenQ_AWS
+    Description: GitHub org/repo allowed to assume the deploy role
+  CreateOIDCProvider:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+    Description: Set false if token.actions.githubusercontent.com already exists in IAM
+
+Conditions:
+  MakeOIDC: !Equals [!Ref CreateOIDCProvider, "true"]
+
+Resources:
+  EcrRepo:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: genq-aws
+      EmptyOnDelete: true
+
+  GitHubOIDC:
+    Type: AWS::IAM::OIDCProvider
+    Condition: MakeOIDC
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList: [sts.amazonaws.com]
+      ThumbprintList: [6938fd4d98bab03faadb97b34396831e3780aea1]
+
+  GitHubActionsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: genq-github-actions-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !If
+                - MakeOIDC
+                - !Ref GitHubOIDC
+                - !Sub arn:aws:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+              StringLike:
+                token.actions.githubusercontent.com:sub: !Sub repo:${GitHubRepo}:*
+      Policies:
+        - PolicyName: deploy-genq-express
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: [ecr:GetAuthorizationToken]
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:BatchGetImage
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:PutImage
+                  - ecr:InitiateLayerUpload
+                  - ecr:UploadLayerPart
+                  - ecr:CompleteLayerUpload
+                Resource: !GetAtt EcrRepo.Arn
+              - Effect: Allow
+                Action:
+                  - ecs:CreateCluster
+                  - ecs:RegisterTaskDefinition
+                  - ecs:CreateExpressGatewayService
+                  - ecs:UpdateExpressGatewayService
+                  - ecs:DescribeExpressGatewayService
+                  - ecs:DescribeClusters
+                  - ecs:DescribeServices
+                  - ecs:DescribeTaskDefinition
+                  - ecs:ListServiceDeployments
+                  - ecs:DescribeServiceDeployments
+                  - ecs:TagResource
+                  - ecs:UntagResource
+                Resource: "*"
+              - Effect: Allow
+                Action: [iam:PassRole]
+                Resource:
+                  - !GetAtt TaskExecutionRole.Arn
+                  - !GetAtt TaskRole.Arn
+                  - !GetAtt InfrastructureRole.Arn
+
+  TaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: genq-task-execution-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: {Service: ecs-tasks.amazonaws.com}
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+
+  # The application's own credentials: Bedrock via IAM, no API keys anywhere.
+  TaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: genq-task-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: {Service: ecs-tasks.amazonaws.com}
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: bedrock-invoke
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                  - bedrock:InvokeModelWithResponseStream
+                Resource: "*"
+
+  InfrastructureRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: genq-ecs-infrastructure-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: {Service: ecs.amazonaws.com}
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonECSInfrastructureRoleforExpressGatewayServices
+
+Outputs:
+  EcrRepositoryUri:
+    Value: !GetAtt EcrRepo.RepositoryUri
+  GitHubActionsRoleArn:
+    Value: !GetAtt GitHubActionsRole.Arn
+  TaskRoleArn:
+    Value: !GetAtt TaskRole.Arn
+  AccountId:
+    Description: Set this as the AWS_ACCOUNT_ID variable in the GitHub repo
+    Value: !Ref AWS::AccountId

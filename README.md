@@ -1,9 +1,14 @@
 # GenQ_AWS — Gentic Mining on AWS (Bedrock, no API keys)
 
 AWS-deployable build of **GenQ** (ProcessIQ process mining + DiagramIQ diagram
-intelligence). One App Runner service runs the whole tool; **AWS Bedrock is the
-AI backend**, authenticated by the service's IAM role — no API keys anywhere,
-the same best practice proven by DiagramIQ_AWS's `amplify/backend.ts`.
+intelligence). One **ECS Express Mode** service runs the whole tool; **AWS
+Bedrock is the AI backend**, authenticated by the task's IAM role — no API keys
+anywhere, the same best practice proven by DiagramIQ_AWS's `amplify/backend.ts`.
+
+> Why not Amplify or App Runner? Amplify can't run Python backends, and App
+> Runner stopped accepting new customers on April 30 2026 — AWS's recommended
+> replacement is ECS Express Mode, deployed here via GitHub Actions
+> (push to `main` → build → deploy, same experience).
 
 - **Where models live:** [`api/aws_models.py`](api/aws_models.py) — the curated,
   verified Bedrock model list + operational best practices (this repo's analog
@@ -15,33 +20,28 @@ the same best practice proven by DiagramIQ_AWS's `amplify/backend.ts`.
 - **One AI everywhere:** the model chosen there powers mapping drafts, the
   copilot, NL Q&A, *and* DiagramIQ notes/vision features.
 
-## Deploy to AWS (App Runner) — one time, ~10 minutes
+## Deploy to AWS (ECS Express Mode) — one time, ~15 minutes
 
-1. **Instance role** (IAM console → Roles → Create):
-   - Trusted entity: **Custom trust policy** with service `tasks.apprunner.amazonaws.com`:
-     ```json
-     {"Version": "2012-10-17", "Statement": [{"Effect": "Allow",
-       "Principal": {"Service": "tasks.apprunner.amazonaws.com"},
-       "Action": "sts:AssumeRole"}]}
-     ```
-   - Inline permission policy (name it e.g. `bedrock-invoke`):
-     ```json
-     {"Version": "2012-10-17", "Statement": [{"Effect": "Allow",
-       "Action": ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"],
-       "Resource": "*"}]}
-     ```
-2. **App Runner console** (region **us-west-2**) → Create service:
-   - Source: **GitHub** → connect → repository `GenQ_AWS`, branch `main`,
-     **automatic deploys ON**.
-   - Build settings: **Use a configuration file** (`apprunner.yaml` — already in
-     the repo; it sets runtime, port 8000 and env vars).
-   - Service settings: 1 vCPU / 2 GB is enough to start. **Min & max size 1
-     instance** (the scheduler and DuckDB are single-instance by design).
-   - Security → **Instance role**: pick the role from step 1.
-3. Create & wait for the first deploy → open the service URL → **Create a
-   workspace** and go.
+1. **CloudFormation** console (region **us-west-2**) → Create stack → *With new
+   resources* → **Upload a template file** → pick
+   [`infra/genq-aws-setup.yaml`](infra/genq-aws-setup.yaml) from this repo →
+   Next → stack name `genq-aws-setup` → Next → acknowledge the IAM checkbox →
+   Create. (~2 min. If it fails saying the GitHub OIDC provider already
+   exists, recreate with parameter `CreateOIDCProvider=false`.)
+   This creates the ECR repo + 4 IAM roles, including **genq-task-role** —
+   the app's Bedrock credentials (no API keys).
+2. **GitHub** → the `GenQ_AWS` repo → Settings → Secrets and variables →
+   Actions → **Variables** tab → New repository variable:
+   `AWS_ACCOUNT_ID` = your 12-digit account id (shown in the CloudFormation
+   stack **Outputs** tab).
+3. GitHub → **Actions** tab → "Deploy to AWS (ECS Express)" → **Run workflow**
+   (or just push any commit). First run takes ~10 min (Docker build + first
+   service provisioning). The run's deploy step prints the **service URL**;
+   it's also in ECS console → Clusters → default → Services → `genq-aws`.
+4. Open the URL → **Create a workspace** and go.
 
-Every `git push` to `main` now redeploys automatically.
+Every `git push` to `main` now redeploys automatically
+([.github/workflows/deploy.yml](.github/workflows/deploy.yml)).
 
 ### Bedrock model access (once per AWS account)
 
@@ -81,9 +81,9 @@ Tests: `.venv/Scripts/python -m pytest`
 
 ## v1 caveats (deliberate)
 
-- **Ephemeral workspaces:** data lives on the instance disk
-  (`PROCESSIQ_DATA=/tmp/processiq-data`); a redeploy resets it — re-upload CSVs
-  or reload the demo dataset. S3 persistence is the natural next step.
+- **Ephemeral workspaces:** data lives on the task's ephemeral disk (`/data`
+  inside the container); a redeploy resets it — re-upload CSVs or reload the
+  demo dataset. S3 persistence is the natural next step.
 - Workspace API keys and provider settings are plain JSON on that disk (shown
   once at creation) — fine for a private POC, harden before public sign-ups.
 - Single instance by design (in-process scheduler, single-writer DuckDB).

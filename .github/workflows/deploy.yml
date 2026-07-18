@@ -1,0 +1,66 @@
+# Push-to-deploy: build the Docker image -> push to ECR -> deploy to
+# Amazon ECS Express Mode (App Runner's successor for new AWS customers).
+#
+# One-time prerequisites (see README):
+#   1. Create the CloudFormation stack from infra/genq-aws-setup.yaml (us-west-2).
+#   2. In GitHub: Settings -> Secrets and variables -> Actions -> Variables ->
+#      add AWS_ACCOUNT_ID = your 12-digit AWS account id.
+#
+# The app authenticates to Bedrock through the genq-task-role — no API keys.
+name: Deploy to AWS (ECS Express)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  id-token: write   # OIDC — keyless AWS auth
+  contents: read
+
+env:
+  AWS_REGION: us-west-2
+  ECR_REPOSITORY: genq-aws
+  SERVICE_NAME: genq-aws
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/genq-github-actions-role
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push image
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+        run: |
+          docker build -t "$REGISTRY/$ECR_REPOSITORY:${{ github.sha }}" .
+          docker push "$REGISTRY/$ECR_REPOSITORY:${{ github.sha }}"
+
+      - name: Deploy to ECS Express Mode
+        uses: aws-actions/amazon-ecs-deploy-express-service@v1
+        with:
+          service-name: ${{ env.SERVICE_NAME }}
+          image: ${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+          execution-role-arn: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/genq-task-execution-role
+          task-role-arn: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/genq-task-role
+          infrastructure-role-arn: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/genq-ecs-infrastructure-role
+          container-port: 8000
+          health-check-path: /
+          cpu: 1024
+          memory: 2048
+          # single instance by design: in-process scheduler + single-writer DuckDB
+          min-task-count: 1
+          max-task-count: 1
+          environment-variables: >-
+            [{"name":"PROCESSIQ_BEDROCK","value":"1"},
+             {"name":"AWS_REGION","value":"us-west-2"}]
