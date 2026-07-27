@@ -20,7 +20,17 @@ COPY extraction/ extraction/
 COPY fixtures/ fixtures/
 COPY --from=ui /api/static api/static
 
-# Persist workspaces outside the container: mount a volume at /data
+# ---- Lambda Web Adapter ----
+# Runs as a Lambda extension alongside uvicorn, proxying Function URL invokes to
+# localhost:8000 over plain HTTP. No handler code needed — api/main.py is untouched.
+# On ECS this layer is simply inert (nothing invokes the extension outside Lambda).
+COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:0.8.4 /lambda-adapter /opt/extensions/lambda-adapter
+ENV AWS_LWA_PORT=8000
+ENV AWS_LWA_READINESS_CHECK_PATH=/
+ENV AWS_LWA_INVOKE_MODE=RESPONSE_STREAM
+
+# On ECS this is a bind-mounted volume; on Lambda it's an EFS access point mounted
+# at the same path by the function's FileSystemConfig (see deploy-lambda.yml / README).
 ENV PROCESSIQ_DATA=/data
 VOLUME /data
 EXPOSE 8000

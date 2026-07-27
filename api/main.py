@@ -22,7 +22,7 @@ import os
 
 from api import storage
 from api.dataload import build_dataload, copilot_answer, load_runs, record_run
-from api.scheduler import load_schedule, save_schedule, start_scheduler
+from api.scheduler import load_schedule, run_due_schedules, save_schedule, start_scheduler
 from api.datamodel import build_datamodel, rederive, save_datamodel_edits
 from api.filters import Filters, apply_filters, filter_params
 from mining.kpis import compute_kpi, compute_kpi_series, parse_kpi_request
@@ -53,7 +53,11 @@ app.add_middleware(
 
 @app.on_event("startup")
 def _start_scheduler() -> None:
-    if not os.environ.get("PROCESSIQ_DISABLE_SCHEDULER"):
+    # On Lambda the execution environment freezes between invocations, so an in-process
+    # sleep-loop thread can't be relied on — EventBridge Scheduler calls
+    # /internal/run-schedules instead (see deploy-lambda.yml).
+    on_lambda = bool(os.environ.get("AWS_LAMBDA_FUNCTION_NAME"))
+    if not os.environ.get("PROCESSIQ_DISABLE_SCHEDULER") and not on_lambda:
         start_scheduler()
 
 
@@ -637,6 +641,14 @@ def put_schedule(body: ScheduleIn, ws: dict = Depends(workspace)):
         return save_schedule(ws, body.enabled, body.frequency, body.updated_by.strip())
     except ValueError as exc:
         raise HTTPException(400, str(exc))
+
+
+@app.post("/internal/run-schedules")
+def run_schedules_internal():
+    """Lambda-only equivalent of the in-process scheduler thread — invoked on a
+    cadence by EventBridge Scheduler, not by end users. Runs the same
+    human-confirmed-mappings-only gate as the ECS in-process scheduler."""
+    return {"executed": run_due_schedules()}
 
 
 @app.post("/api/dataload/run")
