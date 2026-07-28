@@ -17,15 +17,20 @@ COPY mining/ mining/
 COPY modelling/ modelling/
 COPY api/ api/
 COPY extraction/ extraction/
+COPY diagramiq/ diagramiq/
+COPY connectors/ connectors/
 COPY fixtures/ fixtures/
 COPY --from=ui /api/static api/static
+
+# Run the same uvicorn service unmodified on Lambda: the Web Adapter extension
+# translates Function URL invocations into HTTP requests against localhost:8000.
+COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:0.8.4 /lambda-adapter /opt/extensions/lambda-adapter
+ENV AWS_LWA_PORT=8000
+ENV AWS_LWA_READINESS_CHECK_PATH=/
+ENV AWS_LWA_INVOKE_MODE=RESPONSE_STREAM
 
 # Persist workspaces outside the container: mount a volume at /data
 ENV PROCESSIQ_DATA=/data
 VOLUME /data
 EXPOSE 8000
 CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
-COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:0.8.4 /lambda-adapter /opt/extensions/lambda-adapter
-ENV AWS_LWA_PORT=8000
-ENV AWS_LWA_READINESS_CHECK_PATH=/
-ENV AWS_LWA_INVOKE_MODE=RESPONSE_STREAM
