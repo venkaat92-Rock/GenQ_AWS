@@ -1,0 +1,678 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="GenQ — agentic process mining. The agent drafts your event-log model, your expert confirms it once, the business self-serves.">
+<title>GenQ — Agentic Process Mining</title>
+
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body, h1, h2, h3, p, ul, figure { margin: 0; }
+  ul { padding: 0; }
+  img, svg, canvas { display: block; max-width: 100%; }
+  button, input { font: inherit; }
+
+  :root {
+    --ground: #FAF8F3;
+    --surface: #FFFFFF;
+    --raised: #F1EDE4;
+    --stage: #060A11;
+    --text: #101A27;
+    --text-dim: #58687D;
+    --text-faint: #8B99AB;
+    --line: #E3DDD2;
+    --line-soft: #EFEBE3;
+    --signal: #A96608;
+    --signal-bright: #F0A828;
+    --deviation: #B3452B;
+
+    --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+    --s--1: clamp(0.76rem, 0.74rem + 0.1vw, 0.82rem);
+    --s-0: clamp(1rem, 0.96rem + 0.2vw, 1.09rem);
+    --s-1: clamp(1.18rem, 1.08rem + 0.45vw, 1.42rem);
+    --s-2: clamp(1.5rem, 1.28rem + 1vw, 2.15rem);
+    --s-3: clamp(2.1rem, 1.6rem + 2.3vw, 3.4rem);
+    --s-4: clamp(2.6rem, 1.7rem + 4.2vw, 5rem);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground: #070C14; --surface: #0E1826; --raised: #162335;
+      --text: #E7EDF6; --text-dim: #9BAABF; --text-faint: #6F8098;
+      --line: #1E2C41; --line-soft: #162233;
+      --signal: #F0A828; --signal-bright: #F7BC52; --deviation: #E0705A;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #070C14; --surface: #0E1826; --raised: #162335;
+    --text: #E7EDF6; --text-dim: #9BAABF; --text-faint: #6F8098;
+    --line: #1E2C41; --line-soft: #162233;
+    --signal: #F0A828; --signal-bright: #F7BC52; --deviation: #E0705A;
+  }
+  :root[data-theme="light"] {
+    --ground: #FAF8F3; --surface: #FFFFFF; --raised: #F1EDE4;
+    --text: #101A27; --text-dim: #58687D; --text-faint: #8B99AB;
+    --line: #E3DDD2; --line-soft: #EFEBE3;
+    --signal: #A96608; --signal-bright: #F0A828; --deviation: #B3452B;
+  }
+
+  body {
+    background: var(--ground); color: var(--text);
+    font-family: var(--sans); font-size: var(--s-0); line-height: 1.62;
+    -webkit-font-smoothing: antialiased; overflow-x: hidden;
+  }
+  .shell { max-width: 78rem; margin: 0 auto; padding-inline: clamp(1.15rem, 4vw, 3rem); }
+  a { color: inherit; }
+  :focus-visible { outline: 2px solid var(--signal); outline-offset: 3px; border-radius: 2px; }
+
+  .eyebrow {
+    font-family: var(--mono); font-size: var(--s--1); letter-spacing: 0.17em;
+    text-transform: uppercase; color: var(--signal); margin: 0;
+  }
+
+  /* ---------- nav ---------- */
+  nav {
+    position: sticky; top: 0; z-index: 30;
+    background: color-mix(in srgb, var(--ground) 86%, transparent);
+    backdrop-filter: blur(12px); border-bottom: 1px solid var(--line-soft);
+  }
+  nav .shell { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding-block: 0.85rem; }
+  .wordmark { font-size: 1.22rem; font-weight: 700; letter-spacing: -0.03em; }
+  .wordmark b { color: var(--signal); }
+  .wordmark span {
+    display: block; font-family: var(--mono); font-size: 0.6rem;
+    letter-spacing: 0.24em; text-transform: uppercase; color: var(--text-faint);
+    font-weight: 400; margin-top: 1px;
+  }
+  .btn {
+    display: inline-flex; align-items: center; gap: 0.5rem;
+    font-size: var(--s--1); font-weight: 600; padding: 0.62rem 1.15rem;
+    border-radius: 2px; text-decoration: none; border: 1px solid transparent;
+    white-space: nowrap; transition: transform .15s ease, background .15s ease, border-color .15s ease, color .15s ease;
+  }
+  .btn-primary { background: var(--signal); color: #0B0F16; }
+  .btn-primary:hover { background: var(--signal-bright); transform: translateY(-1px); }
+  .btn-ghost { border-color: var(--line); color: var(--text); }
+  .btn-ghost:hover { border-color: var(--signal); color: var(--signal); }
+  .btn-lg { font-size: var(--s-0); padding: 0.85rem 1.6rem; }
+  .arw { font-family: var(--mono); }
+
+  /* ---------- hero (always dark stage) ---------- */
+  .hero { background: var(--stage); color: #E7EDF6; border-bottom: 1px solid #16233580; position: relative; }
+  .hero .shell { padding-block: clamp(3rem, 7vw, 5.5rem) clamp(2rem, 4vw, 3rem); position: relative; z-index: 2; }
+  .hero h1 {
+    font-size: var(--s-4); line-height: 0.99; letter-spacing: -0.042em;
+    font-weight: 780; margin: 1.05rem 0 0; text-wrap: balance; color: #F3F7FC; max-width: 17ch;
+  }
+  .hero h1 em { font-style: normal; color: #F7BC52; }
+  .hero .lede {
+    font-size: var(--s-1); line-height: 1.5; color: #A9B8CC;
+    max-width: 46ch; margin: 1.35rem 0 0; text-wrap: pretty;
+  }
+  .hero-cta { display: flex; flex-wrap: wrap; gap: 0.8rem; margin-top: 2rem; }
+  .hero .btn-ghost { border-color: #2B3B54; color: #C7D4E4; }
+  .hero .btn-ghost:hover { border-color: #F7BC52; color: #F7BC52; }
+
+  /* ---------- live process canvas ---------- */
+  .flowcard {
+    margin-top: clamp(2.5rem, 5vw, 3.5rem);
+    border: 1px solid #1B2942; background: #0A1119; border-radius: 3px; overflow: hidden;
+  }
+  .flowcard-head {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem 1.4rem;
+    padding: 0.75rem 1.1rem; border-bottom: 1px solid #16233A;
+    font-family: var(--mono); font-size: 0.66rem; letter-spacing: 0.13em; text-transform: uppercase;
+  }
+  .flowcard-head .t { color: #8FA1B8; }
+  .flowcard-head .live { color: #F7BC52; display: inline-flex; align-items: center; gap: 0.45rem; }
+  .flowcard-head .dot {
+    width: 6px; height: 6px; border-radius: 50%; background: #F7BC52;
+    animation: pulse 1.8s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: .25 } }
+  .flowcard-head .sp { margin-left: auto; color: #5C6B82; }
+  #flow { display: block; width: 100%; height: auto; }
+  .flowlegend {
+    display: flex; flex-wrap: wrap; gap: 0.5rem 1.4rem;
+    padding: 0.7rem 1.1rem; border-top: 1px solid #16233A;
+    font-family: var(--mono); font-size: 0.64rem; letter-spacing: 0.08em;
+    text-transform: uppercase; color: #7A8CA3;
+  }
+  .flowlegend span { display: inline-flex; align-items: center; gap: 0.45rem; }
+  .flowlegend .sw { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .flowlegend .sw.main { background: #7FB2E8; }
+  .flowlegend .sw.hot { background: #F7BC52; }
+  .flowlegend .sw.rw { background: #E0705A; }
+  .flowlegend .sw.ex { background: #6E7A8C; }
+  .flowcard-foot {
+    display: grid; gap: 1px; background: #16233A; border-top: 1px solid #16233A;
+    grid-template-columns: repeat(2, 1fr);
+  }
+  @media (min-width: 44rem) { .flowcard-foot { grid-template-columns: repeat(4, 1fr); } }
+  .fstat { background: #0A1119; padding: 0.85rem 1.1rem; }
+  .fstat .k {
+    font-family: var(--mono); font-size: 0.6rem; letter-spacing: 0.13em;
+    text-transform: uppercase; color: #5C6B82; display: block; margin-bottom: 0.25rem;
+  }
+  .fstat .v {
+    font-family: var(--mono); font-size: 1.12rem; color: #E7EDF6;
+    font-variant-numeric: tabular-nums; letter-spacing: -0.01em;
+  }
+  .fstat .v.hot { color: #F7BC52; }
+  .fstat .v.bad { color: #E0705A; }
+
+  /* ---------- sections ---------- */
+  section { padding-block: clamp(3.2rem, 7vw, 6rem); }
+  .sec-head { max-width: 46rem; display: flex; flex-direction: column; gap: 0.9rem; }
+  h2 { font-size: var(--s-3); line-height: 1.06; letter-spacing: -0.032em; font-weight: 720; margin: 0; text-wrap: balance; }
+  h3 { font-size: var(--s-1); letter-spacing: -0.018em; font-weight: 660; margin: 0; }
+  p { margin: 0; text-wrap: pretty; }
+  .dim { color: var(--text-dim); }
+  .measure { max-width: 62ch; }
+
+  .reveal { opacity: 0; transform: translateY(14px); transition: opacity .7s ease, transform .7s ease; }
+  .reveal.in { opacity: 1; transform: none; }
+
+  /* gap */
+  .gap-sec { background: var(--surface); border-block: 1px solid var(--line-soft); }
+  .gap-grid { display: grid; gap: 1px; background: var(--line-soft); border: 1px solid var(--line-soft); margin-top: 2.6rem; }
+  @media (min-width: 48rem) { .gap-grid { grid-template-columns: repeat(3, 1fr); } }
+  .gap-cell { background: var(--surface); padding: clamp(1.3rem, 3vw, 2rem); display: flex; flex-direction: column; gap: 0.6rem; }
+  .gap-cell .n {
+    font-family: var(--mono); font-size: var(--s-2); color: var(--signal);
+    letter-spacing: -0.03em; line-height: 1; font-variant-numeric: tabular-nums;
+  }
+  .gap-cell p { font-size: var(--s--1); color: var(--text-dim); }
+
+  /* loop */
+  .loop { display: grid; gap: 1.5rem; margin-top: 3rem; }
+  @media (min-width: 54rem) { .loop { grid-template-columns: repeat(3, 1fr); gap: 0; } }
+  .step { position: relative; padding: clamp(1.4rem, 3vw, 2rem); background: var(--surface); border: 1px solid var(--line); display: flex; flex-direction: column; gap: 0.8rem; }
+  @media (min-width: 54rem) {
+    .step + .step { border-left: none; }
+    .step::after {
+      content: ""; position: absolute; right: -7px; top: 50%; z-index: 2;
+      width: 12px; height: 12px; transform: translateY(-50%) rotate(45deg);
+      background: var(--surface); border-top: 1px solid var(--line); border-right: 1px solid var(--line);
+    }
+    .step:last-child::after { display: none; }
+  }
+  .step .idx { font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--signal); }
+  .step .who {
+    display: inline-block; font-family: var(--mono); font-size: 0.62rem; letter-spacing: 0.11em;
+    text-transform: uppercase; padding: 0.2rem 0.5rem; border: 1px solid var(--line);
+    color: var(--text-faint); border-radius: 2px; width: max-content;
+  }
+  .step p { font-size: var(--s--1); color: var(--text-dim); }
+
+  .quote-strip { margin-top: 3rem; padding: clamp(1.5rem, 4vw, 2.4rem); background: var(--raised); border-left: 3px solid var(--signal); }
+  .quote-strip p { font-size: var(--s-1); line-height: 1.45; max-width: 54ch; }
+  .quote-strip code { font-family: var(--mono); font-size: 0.86em; color: var(--signal); }
+  .quote-strip .src { font-family: var(--mono); font-size: 0.7rem; color: var(--text-faint); margin-top: 0.9rem; }
+
+  /* caps */
+  .caps-sec { background: var(--surface); border-block: 1px solid var(--line-soft); }
+  .caps { display: grid; gap: 1px; background: var(--line-soft); border: 1px solid var(--line-soft); margin-top: 2.6rem; }
+  @media (min-width: 40rem) { .caps { grid-template-columns: repeat(2, 1fr); } }
+  @media (min-width: 64rem) { .caps { grid-template-columns: repeat(3, 1fr); } }
+  .cap { background: var(--surface); padding: clamp(1.2rem, 2.5vw, 1.7rem); display: flex; flex-direction: column; gap: 0.5rem; transition: background .2s ease; }
+  .cap:hover { background: var(--raised); }
+  .cap .k { font-family: var(--mono); font-size: 0.64rem; letter-spacing: 0.13em; text-transform: uppercase; color: var(--text-faint); }
+  .cap h3 { font-size: var(--s-0); font-weight: 640; }
+  .cap p { font-size: var(--s--1); color: var(--text-dim); }
+
+  /* fit */
+  .fit-grid { display: grid; gap: 2rem; margin-top: 2.4rem; }
+  @media (min-width: 52rem) { .fit-grid { grid-template-columns: 1fr 1fr; gap: 3rem; } }
+  .fit-col ul { margin: 1rem 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 0.7rem; }
+  .fit-col li { display: flex; gap: 0.7rem; font-size: var(--s--1); color: var(--text-dim); }
+  .fit-col li::before { content: ""; flex: none; width: 6px; height: 6px; margin-top: 0.55em; border-radius: 50%; background: var(--signal); }
+  .fit-col.out li::before { background: transparent; border: 1px solid var(--text-faint); }
+
+  /* cta */
+  .cta { background: var(--stage); color: #E7EDF6; }
+  .cta .shell { padding-block: clamp(3.5rem, 8vw, 6rem); display: flex; flex-direction: column; align-items: flex-start; gap: 1.25rem; }
+  .cta h2 { color: #F3F7FC; max-width: 22ch; }
+  .cta p { color: #A9B8CC; max-width: 54ch; }
+  .cta .row { display: flex; flex-wrap: wrap; gap: 0.8rem; margin-top: 0.5rem; }
+  .cta .btn-ghost { border-color: #2B3B54; color: #C7D4E4; }
+  .cta .btn-ghost:hover { border-color: #F7BC52; color: #F7BC52; }
+
+  footer { border-top: 1px solid var(--line-soft); }
+  footer .shell {
+    padding-block: 2rem; display: flex; flex-wrap: wrap; gap: 1rem;
+    justify-content: space-between; align-items: center;
+    font-family: var(--mono); font-size: 0.7rem; color: var(--text-faint);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+    .reveal { opacity: 1; transform: none; }
+  }
+</style>
+</head>
+<body>
+<nav>
+  <div class="shell">
+    <div class="wordmark">Gen<b>Q</b><span>Gentic Mining</span></div>
+    <a class="btn btn-primary" href="/app">Try it yourself <span class="arw">→</span></a>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="shell">
+    <p class="eyebrow">Agentic process mining</p>
+    <h1>Watch your process <em>reveal itself</em>.</h1>
+    <p class="lede">GenQ's agent reads your source systems, drafts the event-log model, and explains every semantic choice in plain language. Your team confirms it once — then the whole business can ask its own questions.</p>
+    <div class="hero-cta">
+      <a class="btn btn-primary btn-lg" href="/app">Try it yourself <span class="arw">→</span></a>
+      <a class="btn btn-ghost btn-lg" href="#loop">See how it works</a>
+    </div>
+
+    <div class="flowcard">
+      <div class="flowcard-head">
+        <span class="live"><span class="dot"></span>Live</span>
+        <span class="t">Purchase-to-pay · discovered from EKKO / EKPO / MSEG / RBKP / BKPF</span>
+        <span class="sp">11 activities · 67 variants</span>
+      </div>
+      <canvas id="flow" width="1200" height="400" role="img"
+        aria-label="Animated directly-follows map of a purchase-to-pay process. Cases flow from Purchase Requisition through PO Created, PO Approved, Goods Receipt, Invoice Received and Payment Sent. Some divert into PO change and re-approval, partial goods receipts, or invoice blocks resolved by credit memo; a small share are cancelled. Cases visibly queue at the slow invoice-to-payment hand-off."></canvas>
+      <div class="flowlegend">
+        <span><i class="sw main"></i>On the happy path</span>
+        <span><i class="sw hot"></i>Waiting at the bottleneck</span>
+        <span><i class="sw rw"></i>In rework</span>
+        <span><i class="sw ex"></i>Cancelled / blocked</span>
+      </div>
+      <div class="flowcard-foot">
+        <div class="fstat"><span class="k">Cases completed</span><span class="v" id="s-done">0</span></div>
+        <div class="fstat"><span class="k">Queued at bottleneck</span><span class="v hot" id="s-queue">0</span></div>
+        <div class="fstat"><span class="k">Rework loops</span><span class="v bad" id="s-rework">0</span></div>
+        <div class="fstat"><span class="k">Cancelled POs</span><span class="v bad" id="s-cancel">0</span></div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<section class="gap-sec">
+  <div class="shell">
+    <div class="sec-head reveal">
+      <p class="eyebrow">The mid-market gap</p>
+      <h2>The analytics were never the hard part.</h2>
+      <p class="dim measure">Variant analysis and conformance checking are solved, published algorithms. What stalls process mining is everything upstream: someone has to decide which table means <em>"invoice cleared"</em> — and until that decision is made, nothing downstream can start.</p>
+    </div>
+
+    <div class="gap-grid">
+      <div class="gap-cell reveal"><div class="n" data-count="80" data-suffix="%">80%</div><h3>Of effort is data modelling</h3><p>Not analysis. The bulk of a process-mining programme is consumed mapping source systems to an event log.</p></div>
+      <div class="gap-cell reveal"><div class="n" data-count="6" data-suffix="–9 mo">6–9 mo</div><h3>Typical time-to-first-insight</h3><p>Most of that window goes on modelling and validation before anyone sees a process map.</p></div>
+      <div class="gap-cell reveal"><div class="n">Days</div><h3>What GenQ compresses it to</h3><p>The agent drafts the model from the schema itself, so the work starts at review rather than at a blank page.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="loop">
+  <div class="shell">
+    <div class="sec-head reveal">
+      <p class="eyebrow">How GenQ works</p>
+      <h2>Agent drafts. Human confirms. Business self-serves.</h2>
+      <p class="dim measure">One loop, run once per process. Deliberately not autonomous — a wrong activity definition doesn't throw an error, it produces a confident, incorrect dashboard. So a person signs off on the semantics, exactly once.</p>
+    </div>
+
+    <div class="loop">
+      <div class="step reveal">
+        <span class="idx">Step 01</span><span class="who">Agent</span>
+        <h3>Reads the schema, drafts the model</h3>
+        <p>Point it at SAP tables, Salesforce, ServiceNow, Jira or a CSV export. The agent applies domain priors, proposes the case ID, activities and timestamps — and writes the SQL.</p>
+      </div>
+      <div class="step reveal">
+        <span class="idx">Step 02</span><span class="who">Your expert · once</span>
+        <h3>Confirms the semantics, in business language</h3>
+        <p>Every choice arrives with a rationale and a confidence level. Genuinely ambiguous calls — is a case a PO, or a PO line? — become blocking questions. Nothing is built until they're answered.</p>
+      </div>
+      <div class="step reveal">
+        <span class="idx">Step 03</span><span class="who">Everyone</span>
+        <h3>Asks its own questions</h3>
+        <p>Variants, bottlenecks, conformance, rework, custom KPIs — plus plain-English questions answered with citations back to the activities and filters used.</p>
+      </div>
+    </div>
+
+    <div class="quote-strip reveal">
+      <p>“I mapped <strong>Invoice Cleared</strong> to <code>RBKP</code> rows where the posting date is set — confirm, or correct me.”</p>
+      <p class="src">Every mapping is a versioned, human-readable spec. The generated SQL stays visible and editable. No black boxes in the data path.</p>
+    </div>
+  </div>
+</section>
+
+<section class="caps-sec">
+  <div class="shell">
+    <div class="sec-head reveal">
+      <p class="eyebrow">What you get</p>
+      <h2>The used subset of process mining — done properly.</h2>
+      <p class="dim measure">Not a parity checklist. The capabilities teams actually open every week, built on established algorithms rather than reimplemented ones.</p>
+    </div>
+    <div class="caps">
+      <div class="cap reveal"><span class="k">Discovery</span><h3>Process &amp; variant explorer</h3><p>Directly-follows maps in frequency or performance mode. Isolate variants and watch the map redraw from exactly those traces.</p></div>
+      <div class="cap reveal"><span class="k">Conformance</span><h3>Target vs reality</h3><p>Define the to-be process; see which cases deviate, where, and what the deviation costs in days.</p></div>
+      <div class="cap reveal"><span class="k">Performance</span><h3>Bottlenecks, rework, throughput</h3><p>Which hand-off eats the cycle time, which supplier drives the rework, and how much of it is repeat work.</p></div>
+      <div class="cap reveal"><span class="k">Self-serve</span><h3>Ask in plain English</h3><p>Natural-language questions over the event log. Every answer cites the activities and filters behind it.</p></div>
+      <div class="cap reveal"><span class="k">Modelling</span><h3>Inspectable data model</h3><p>An ERD the agent derived, foreign keys traced from executed SQL, identifiers probed against real data — all human-editable.</p></div>
+      <div class="cap reveal"><span class="k">DiagramIQ</span><h3>BPMN intelligence</h3><p>Turn transcripts, spreadsheets and Visio files into validated BPMN, under a governed repository with approvals.</p></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="shell">
+    <div class="sec-head reveal">
+      <p class="eyebrow">Honest scope</p>
+      <h2>Built for the companies the enterprise stack prices out.</h2>
+      <p class="dim measure">GenQ is an accelerator for teams that will never buy an enterprise process-mining platform — not a replacement for one. Being specific about the boundary is how the agentic bet stays credible.</p>
+    </div>
+    <div class="fit-grid">
+      <div class="fit-col reveal">
+        <h3>Where it fits</h3>
+        <ul>
+          <li>Event volumes that suit an embedded columnar engine — no distributed cluster required</li>
+          <li>Reasonably vanilla source systems, where the agent's domain priors hold</li>
+          <li>Teams that need a working model in days rather than a quarter-long modelling phase</li>
+          <li>Standard processes: purchase-to-pay, order-to-cash, and growing</li>
+        </ul>
+      </div>
+      <div class="fit-col out reveal">
+        <h3>Deliberately out of scope</h3>
+        <ul>
+          <li>Object-centric process mining</li>
+          <li>Automation and action-flow orchestration</li>
+          <li>Task mining and desktop capture</li>
+          <li>ML forecasting and simulation</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="cta">
+  <div class="shell">
+    <p class="eyebrow">Try it</p>
+    <h2>Load a dataset. Watch it map itself.</h2>
+    <p>A synthetic purchase-to-pay warehouse ships with the product — 360 orders across seven supplier categories, complete with chip-shortage delays, price disputes and maverick buying. Point the agent at it and see the model it drafts.</p>
+    <div class="row">
+      <a class="btn btn-primary btn-lg" href="/app">Open GenQ <span class="arw">→</span></a>
+      <a class="btn btn-ghost btn-lg" href="#loop">Read how it works</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="shell">
+    <span>GenQ · Gentic Mining</span>
+    <span>Agentic process mining for the mid-market</span>
+  </div>
+</footer>
+
+<script>
+(function () {
+  "use strict";
+  var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /* ---------------- scroll reveals ---------------- */
+  var revealEls = document.querySelectorAll(".reveal");
+  if ("IntersectionObserver" in window && !reduced) {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e, i) {
+        if (e.isIntersecting) {
+          var el = e.target;
+          setTimeout(function () { el.classList.add("in"); }, (i % 3) * 90);
+          io.unobserve(el);
+          var num = el.querySelector("[data-count]");
+          if (num) countUp(num);
+        }
+      });
+    }, { threshold: 0.18 });
+    revealEls.forEach(function (el) { io.observe(el); });
+  } else {
+    revealEls.forEach(function (el) { el.classList.add("in"); });
+  }
+
+  function countUp(el) {
+    var target = parseFloat(el.getAttribute("data-count"));
+    var suffix = el.getAttribute("data-suffix") || "";
+    var start = performance.now(), dur = 900;
+    function tick(now) {
+      var p = Math.min(1, (now - start) / dur);
+      var eased = 1 - Math.pow(1 - p, 3);
+      el.textContent = Math.round(target * eased) + suffix;
+      if (p < 1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+
+  /* ---------------- live process flow ----------------
+     A real directly-follows graph: cases route probabilistically through the
+     SAP purchase-to-pay chain, including change/re-approval cycles, partial
+     goods receipts, invoice blocks resolved by credit memo, and cancellations.
+     Congestion at the invoice-to-payment hand-off emerges from the simulation
+     rather than being scripted.                                             */
+  var cv = document.getElementById("flow");
+  if (!cv || !cv.getContext) return;
+  var ctx = cv.getContext("2d");
+  var W = 1200, H = 400;
+  var MONO = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+
+  var C = {
+    box: "#101B2B", boxLine: "#27394F", boxHot: "#F7BC52", boxDead: "#4A5568",
+    edge: "#2E4159", edgeHot: "#F7BC52", rework: "#E0705A", exception: "#55637A",
+    text: "#CBD8E8", textDim: "#8497AD", faint: "#65788F",
+    token: "#7FB2E8", tokenHot: "#F7BC52", tokenRw: "#E0705A", tokenEx: "#6E7A8C"
+  };
+
+  var Y1 = 48, Y2 = 180, Y3 = 305, NH = 40;
+  var N = [
+    { x: 15,   y: Y1, w: 115, h: NH, label: "PR Created" },        // 0
+    { x: 175,  y: Y1, w: 118, h: NH, label: "PR Approved" },       // 1
+    { x: 338,  y: Y1, w: 110, h: NH, label: "PO Created" },        // 2
+    { x: 493,  y: Y1, w: 118, h: NH, label: "PO Approved" },       // 3
+    { x: 656,  y: Y1, w: 122, h: NH, label: "Goods Receipt" },     // 4
+    { x: 823,  y: Y1, w: 135, h: NH, label: "Invoice Received", hot: true }, // 5
+    { x: 1058, y: Y1, w: 125, h: NH, label: "Payment Sent" },      // 6
+    { x: 493,  y: Y2, w: 118, h: NH, label: "PO Changed" },        // 7
+    { x: 823,  y: Y2, w: 135, h: NH, label: "Invoice Blocked" },   // 8
+    { x: 656,  y: Y2, w: 122, h: NH, label: "Credit Memo" },       // 9
+    { x: 338,  y: Y3, w: 110, h: NH, label: "PO Cancelled", dead: true } // 10
+  ];
+  function R(i) { return { x: N[i].x + N[i].w, y: N[i].y + N[i].h / 2 }; }
+  function L(i) { return { x: N[i].x,          y: N[i].y + N[i].h / 2 }; }
+  function T(i, f) { return { x: N[i].x + N[i].w * f, y: N[i].y }; }
+  function B(i, f) { return { x: N[i].x + N[i].w * f, y: N[i].y + N[i].h }; }
+
+  // from, to, weight (out-edges of a node sum to 1), speed, kind, label
+  var E = [
+    { f: 0, t: 1, w: 1.00, s: 0.0085, k: "n",  l: "0.8d" },
+    { f: 1, t: 2, w: 1.00, s: 0.0080, k: "n",  l: "1.6d" },
+    { f: 2, t: 3, w: 0.93, s: 0.0070, k: "n",  l: "2.1d" },
+    { f: 3, t: 4, w: 0.70, s: 0.0055, k: "n",  l: "8.4d" },
+    { f: 4, t: 5, w: 0.62, s: 0.0065, k: "n",  l: "3.1d" },
+    { f: 5, t: 6, w: 0.76, s: 0.0011, k: "hot", l: "40.5d · bottleneck" },
+    { f: 3, t: 7, w: 0.30, s: 0.0080, k: "rw", l: "30% changed" },
+    { f: 7, t: 3, w: 1.00, s: 0.0075, k: "rw" },
+    { f: 4, t: 4, w: 0.38, s: 0.0060, k: "rw", l: "38% partial receipt" },
+    { f: 5, t: 8, w: 0.24, s: 0.0080, k: "rw", l: "24% blocked" },
+    { f: 8, t: 9, w: 1.00, s: 0.0070, k: "rw" },
+    { f: 9, t: 5, w: 1.00, s: 0.0065, k: "rw" },
+    { f: 2, t: 10, w: 0.07, s: 0.0060, k: "ex", l: "7% cancelled" }
+  ];
+  // geometry per edge (straight unless c1/c2 given)
+  E[0].a = R(0);        E[0].b = L(1);
+  E[1].a = R(1);        E[1].b = L(2);
+  E[2].a = R(2);        E[2].b = L(3);
+  E[3].a = R(3);        E[3].b = L(4);
+  E[4].a = R(4);        E[4].b = L(5);
+  E[5].a = R(5);        E[5].b = L(6);
+  E[6].a = B(3, 0.28);  E[6].b = T(7, 0.28);
+  E[7].a = T(7, 0.72);  E[7].b = B(3, 0.72);
+  E[8].a = T(4, 0.74);  E[8].b = T(4, 0.26);
+  E[8].c1 = { x: N[4].x + N[4].w * 0.74, y: Y1 - 34 };
+  E[8].c2 = { x: N[4].x + N[4].w * 0.26, y: Y1 - 34 };
+  E[9].a = B(5, 0.26);  E[9].b = T(8, 0.26);
+  E[10].a = L(8);       E[10].b = R(9);
+  E[11].a = T(9, 0.55); E[11].b = B(5, 0.78);
+  E[11].c1 = { x: N[9].x + N[9].w * 0.55, y: Y2 - 46 };
+  E[11].c2 = { x: N[5].x + N[5].w * 0.78, y: Y1 + 96 };
+  E[12].a = B(2, 0.5);  E[12].b = T(10, 0.5);
+
+  var OUT = {};
+  E.forEach(function (e, i) { (OUT[e.f] = OUT[e.f] || []).push(i); });
+  var TERMINAL = { 6: "done", 10: "cancel" };
+
+  function pointAt(e, t) {
+    if (!e.c1) return { x: e.a.x + (e.b.x - e.a.x) * t, y: e.a.y + (e.b.y - e.a.y) * t };
+    var u = 1 - t;
+    return {
+      x: u*u*u*e.a.x + 3*u*u*t*e.c1.x + 3*u*t*t*e.c2.x + t*t*t*e.b.x,
+      y: u*u*u*e.a.y + 3*u*u*t*e.c1.y + 3*u*t*t*e.c2.y + t*t*t*e.b.y
+    };
+  }
+  E.forEach(function (e) {
+    var p1 = pointAt(e, 0.94), p2 = pointAt(e, 1);
+    e.dir = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+  });
+
+  function pick(node) {
+    var list = OUT[node]; if (!list) return -1;
+    var r = Math.random(), acc = 0;
+    for (var i = 0; i < list.length; i++) { acc += E[list[i]].w; if (r <= acc) return list[i]; }
+    return list[list.length - 1];
+  }
+
+  var tokens = [], done = 0, reworks = 0, cancelled = 0, spawnTimer = 0;
+  function newToken(edge, t) { return { e: edge, t: t || 0, j: (Math.random() - 0.5) * 8 }; }
+  for (var i = 0; i < 26; i++) {
+    var start = pick(0);
+    var tk = newToken(start, Math.random());
+    for (var hop = 0; hop < (i % 6); hop++) {           // pre-advance for density
+      var nx = pick(E[tk.e].t); if (nx < 0) break; tk.e = nx; tk.t = Math.random();
+    }
+    tokens.push(tk);
+  }
+
+  function step() {
+    if (++spawnTimer > 20 && tokens.length < 120) { tokens.push(newToken(pick(0))); spawnTimer = 0; }
+
+    for (var i = tokens.length - 1; i >= 0; i--) {
+      var tk = tokens[i], e = E[tk.e], sp = e.s;
+      if (e.k === "hot") {                               // queueing behind others
+        var ahead = 0;
+        for (var k = 0; k < tokens.length; k++) {
+          var o = tokens[k];
+          if (o !== tk && o.e === tk.e && o.t > tk.t && o.t - tk.t < 0.06) ahead++;
+        }
+        sp = sp / (1 + ahead * 1.6);
+      }
+      tk.t += sp;
+      if (tk.t < 1) continue;
+
+      var arrived = e.t;
+      if (TERMINAL[arrived]) {
+        if (TERMINAL[arrived] === "done") done++; else cancelled++;
+        tokens.splice(i, 1); continue;
+      }
+      var next = pick(arrived);
+      if (next < 0) { tokens.splice(i, 1); continue; }
+      if (E[next].k === "rw" && E[next].f !== 7 && E[next].f !== 8 && E[next].f !== 9) reworks++;
+      tk.e = next; tk.t = 0;
+    }
+  }
+
+  function roundRect(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y); ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r); ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h); ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r); ctx.quadraticCurveTo(x, y, x + r, y); ctx.closePath();
+  }
+  function arrow(p, dir, color) {
+    ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(dir); ctx.fillStyle = color;
+    ctx.beginPath(); ctx.moveTo(-7, -3.8); ctx.lineTo(0, 0); ctx.lineTo(-7, 3.8); ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+  function edgeColor(k) {
+    return k === "hot" ? C.edgeHot : k === "rw" ? C.rework : k === "ex" ? C.exception : C.edge;
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+    ctx.lineCap = "round";
+
+    E.forEach(function (e) {
+      var col = edgeColor(e.k), hot = e.k === "hot";
+      ctx.save();
+      ctx.strokeStyle = col;
+      ctx.lineWidth = hot ? 2.8 : 1.6;
+      if (e.k === "rw" || e.k === "ex") ctx.setLineDash([5, 4]);
+      ctx.beginPath();
+      ctx.moveTo(e.a.x, e.a.y);
+      if (e.c1) ctx.bezierCurveTo(e.c1.x, e.c1.y, e.c2.x, e.c2.y, e.b.x, e.b.y);
+      else ctx.lineTo(e.b.x, e.b.y);
+      ctx.stroke();
+      ctx.restore();
+      arrow(e.b, e.dir, col);
+
+      if (!e.l) return;
+      var mid = pointAt(e, 0.5), vertical = Math.abs(e.b.x - e.a.x) < 30;
+      ctx.fillStyle = hot ? C.edgeHot : (e.k === "n" ? C.faint : col);
+      ctx.font = (hot ? "bold " : "") + "10.5px " + MONO;
+      ctx.textAlign = vertical ? "left" : "center";
+      ctx.fillText(e.l, vertical ? mid.x + 9 : mid.x, vertical ? mid.y + 3 : mid.y - 11);
+      ctx.textAlign = "left";
+    });
+
+    tokens.forEach(function (tk) {
+      var e = E[tk.e], p = pointAt(e, tk.t);
+      var col = e.k === "hot" ? C.tokenHot : e.k === "rw" ? C.tokenRw
+              : e.k === "ex" ? C.tokenEx : C.token;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y + tk.j * 0.3, e.k === "hot" ? 3.5 : 2.9, 0, Math.PI * 2);
+      ctx.fillStyle = col; ctx.globalAlpha = 0.94; ctx.fill(); ctx.globalAlpha = 1;
+    });
+
+    N.forEach(function (n) {
+      ctx.fillStyle = C.box;
+      ctx.strokeStyle = n.hot ? C.boxHot : n.dead ? C.boxDead : C.boxLine;
+      ctx.lineWidth = 1;
+      if (n.dead) ctx.setLineDash([4, 3]);
+      roundRect(n.x, n.y, n.w, n.h, 3); ctx.fill(); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = n.dead ? C.textDim : C.text;
+      ctx.font = "11px " + MONO;
+      ctx.textAlign = "center";
+      ctx.fillText(n.label, n.x + n.w / 2, n.y + n.h / 2 + 4);
+      ctx.textAlign = "left";
+    });
+  }
+
+  var qEl = document.getElementById("s-queue"),
+      dEl = document.getElementById("s-done"),
+      rEl = document.getElementById("s-rework"),
+      cEl = document.getElementById("s-cancel");
+  var statTick = 0;
+
+  function loop() {
+    step(); draw();
+    if (++statTick % 8 === 0) {
+      var q = 0;
+      for (var i = 0; i < tokens.length; i++) if (E[tokens[i].e].k === "hot") q++;
+      qEl.textContent = q; dEl.textContent = done;
+      rEl.textContent = reworks; cEl.textContent = cancelled;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  if (reduced) { for (var z = 0; z < 420; z++) step(); draw(); }
+  else loop();
+})();
+</script>
+</body>
+</html>

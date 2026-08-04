@@ -22,7 +22,7 @@ import os
 
 from api import storage
 from api.dataload import build_dataload, copilot_answer, load_runs, record_run
-from api.scheduler import load_schedule, save_schedule, start_scheduler
+from api.scheduler import load_schedule, run_due_schedules, save_schedule, start_scheduler
 from api.datamodel import build_datamodel, rederive, save_datamodel_edits
 from api.filters import Filters, apply_filters, filter_params
 from mining.kpis import compute_kpi, compute_kpi_series, parse_kpi_request
@@ -44,6 +44,7 @@ FIXTURES_SAP = Path(__file__).parent.parent / "fixtures" / "sap"
 FIXTURES_O2C = Path(__file__).parent.parent / "fixtures" / "o2c"
 FIXTURES_FORD_P2P = Path(__file__).parent.parent / "fixtures" / "ford_p2p"
 STATIC_DIR = Path(__file__).parent / "static"
+LANDING_PAGE = Path(__file__).parent / "landing.html"
 
 app = FastAPI(title="GenQ", version="0.1.0")
 app.add_middleware(
@@ -53,7 +54,11 @@ app.add_middleware(
 
 @app.on_event("startup")
 def _start_scheduler() -> None:
-    if not os.environ.get("PROCESSIQ_DISABLE_SCHEDULER"):
+    # On Lambda the execution environment freezes between invocations, so an in-process
+    # sleep-loop thread can't be relied on — EventBridge Scheduler calls
+    # /internal/run-schedules instead (see deploy-lambda.yml).
+    on_lambda = bool(os.environ.get("AWS_LAMBDA_FUNCTION_NAME"))
+    if not os.environ.get("PROCESSIQ_DISABLE_SCHEDULER") and not on_lambda:
         start_scheduler()
 
 
@@ -639,6 +644,14 @@ def put_schedule(body: ScheduleIn, ws: dict = Depends(workspace)):
         raise HTTPException(400, str(exc))
 
 
+@app.post("/internal/run-schedules")
+def run_schedules_internal():
+    """Lambda-only equivalent of the in-process scheduler thread — invoked on a
+    cadence by EventBridge Scheduler, not by end users. Runs the same
+    human-confirmed-mappings-only gate as the ECS in-process scheduler."""
+    return {"executed": run_due_schedules()}
+
+
 @app.post("/api/dataload/run")
 def run_dataload(ws: dict = Depends(workspace)):
     """Run now: rebuild the event log from staged sources using the confirmed model."""
@@ -836,10 +849,23 @@ app.include_router(_make_workflow_router(workspace))
 
 if STATIC_DIR.exists():
 
-    @app.get("/", include_in_schema=False)
-    def index():
+    def _spa():
         # index.html must never be cached — it points at the hashed asset bundles,
         # so a stale copy pins users to an old version of the app after a deploy.
         return FileResponse(STATIC_DIR / "index.html", headers={"Cache-Control": "no-cache"})
 
+    @app.get("/", include_in_schema=False)
+    def landing():
+        """Marketing landing page. Falls back to the app when it isn't shipped, so
+        a container built without landing.html still serves something useful."""
+        if LANDING_PAGE.exists():
+            return FileResponse(LANDING_PAGE, headers={"Cache-Control": "no-cache"})
+        return _spa()
+
+    @app.get("/app", include_in_schema=False)
+    def index():
+        return _spa()
+
+    # Mounted last: the exact routes above win, everything else (hashed /assets/*)
+    # is served straight from the built bundle.
     app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="ui")

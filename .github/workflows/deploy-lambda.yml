@@ -1,0 +1,61 @@
+# Build the Docker image -> push to ECR -> update the Lambda function's code.
+# Manually triggered (workflow_dispatch) so it never fires alongside the ECS
+# auto-deploy in deploy.yml on every push to main — run it explicitly when you
+# want to ship the current main to the Lambda function.
+#
+# One-time prerequisites (not done by this workflow):
+#   1. The Lambda function exists (package-type Image), with:
+#      - VPC config + an EFS access point mounted at /mnt/data (or whatever
+#        path you configure PROCESSIQ_DATA to on the function)
+#      - a Function URL (RESPONSE_STREAM invoke mode)
+#      - bedrock:InvokeModel on its execution role
+#   2. GitHub repo variable AWS_ACCOUNT_ID (same one deploy.yml uses)
+#   3. GitHub repo variable LAMBDA_FUNCTION_NAME (e.g. genq-aws-lambda)
+#   4. The OIDC role assumed below has lambda:UpdateFunctionCode +
+#      lambda:GetFunction on that function (in addition to whatever ECR
+#      permissions it already has for deploy.yml)
+name: Deploy to AWS Lambda
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  id-token: write   # OIDC — keyless AWS auth
+  contents: read
+
+env:
+  AWS_REGION: us-west-2
+  ECR_REPOSITORY: genq-aws
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/genq-github-actions-role
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push image
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+        run: |
+          docker build -t "$REGISTRY/$ECR_REPOSITORY:${{ github.sha }}" .
+          docker push "$REGISTRY/$ECR_REPOSITORY:${{ github.sha }}"
+
+      - name: Update Lambda function code
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+        run: |
+          aws lambda update-function-code \
+            --function-name "${{ vars.LAMBDA_FUNCTION_NAME }}" \
+            --image-uri "$REGISTRY/$ECR_REPOSITORY:${{ github.sha }}"
+          aws lambda wait function-updated \
+            --function-name "${{ vars.LAMBDA_FUNCTION_NAME }}"
