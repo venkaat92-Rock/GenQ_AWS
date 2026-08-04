@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { api, getApiKey } from '../api'
 import BpmnViewer from '../components/BpmnViewer'
 import BpmnEditor, { RepoItem } from '../components/BpmnEditor'
+import AiProviderPanel, { AiSettings, describeSource } from '../components/AiProviderPanel'
 
 // starter diagram for new L1-L4 models drawn in the editor
 const NEW_DIAGRAM_XML = `<?xml version="1.0" encoding="UTF-8"?>
@@ -82,6 +83,7 @@ export default function DiagramStudioPage() {
   const [viewing, setViewing] = useState<{ name: string; xml: string } | null>(null)
   const [report, setReport] = useState<{ name: string; issues: Issue[] } | null>(null)
   const [settings, setSettings] = useState<DiagramSettings | null>(null)
+  const [sharedAi, setSharedAi] = useState<AiSettings | null>(null)
   const [keyDraft, setKeyDraft] = useState('')
   const [showSettings, setShowSettings] = useState(false)
   const notesInput = useRef<HTMLInputElement>(null)
@@ -230,14 +232,26 @@ export default function DiagramStudioPage() {
     }
   }
 
+  // The workspace AI (Bedrock / Anthropic / Vertex) powers notes analysis whenever the
+  // diagram override is auto|anthropic and no legacy diagram key is set — see
+  // api/diagram.py::_workspace_ai. The hint has to account for it, or a perfectly
+  // working Bedrock deployment reports "no AI provider reachable".
+  const workspaceAiActive = !!sharedAi?.active
   const engineHint = settings
     ? settings.provider === 'rule-based'
-      ? '⚠ Rule-based only — no dependencies/gateways will be extracted from notes.'
-      : settings.has_workspace_key || settings.has_server_key
-        ? '✓ Claude AI available for notes analysis.'
-        : settings.ollama_reachable
-          ? '✓ Local Ollama available for notes analysis.'
-          : '⚠ No AI provider reachable — notes analysis will fall back to the rule-based parser. Configure one for desktop-grade results.'
+      ? '⚠ Rule-based only — no dependencies, systems or gateways will be extracted from notes.'
+      : settings.provider === 'ollama'
+        ? (settings.ollama_reachable
+            ? '✓ Local Ollama available for notes analysis.'
+            : '⚠ Ollama selected but not running — notes analysis will fall back to the rule-based parser.')
+        : workspaceAiActive
+          ? `✓ ${sharedAi!.model} via ${sharedAi!.provider === 'bedrock' ? 'AWS Bedrock'
+              : sharedAi!.provider === 'vertex' ? 'Google Vertex AI' : 'the Anthropic API'} — ${describeSource(sharedAi!).toLowerCase()}`
+          : settings.has_workspace_key || settings.has_server_key
+            ? '✓ Claude AI available for notes analysis.'
+            : settings.ollama_reachable
+              ? '✓ Local Ollama available for notes analysis.'
+              : '⚠ No AI provider configured — notes analysis will fall back to the rule-based parser. Pick one below for desktop-grade results.'
     : ''
 
   async function act(label: string, fn: () => Promise<void>) {
@@ -449,47 +463,67 @@ export default function DiagramStudioPage() {
         <p className="hint" style={{ marginTop: 8 }}>{engineHint}</p>
 
         {showSettings && settings && (
-          <div className="filter-panel" style={{ marginTop: 10 }}>
-            <div className="filter-group">
-              <span className="filter-label">Notes-analysis provider</span>
-              <div className="row">
-                <select
-                  value={settings.provider}
-                  onChange={(e) => saveSettings({ provider: e.target.value })}
-                >
-                  <option value="auto">Auto (Claude → Ollama → rule-based)</option>
-                  <option value="anthropic">Anthropic Claude (best quality)</option>
-                  <option value="ollama">Ollama (local, private)</option>
-                  <option value="rule-based">Rule-based only (no AI)</option>
-                </select>
-                <span className="chip">
-                  Claude key: {settings.has_workspace_key ? 'workspace ✓' : settings.has_server_key ? 'server ✓' : 'none'}
-                </span>
-                <span className="chip">Ollama: {settings.ollama_reachable ? 'reachable ✓' : 'not running'}</span>
-              </div>
-            </div>
-            <div className="filter-group">
-              <span className="filter-label">Anthropic API key (stored in this workspace only)</span>
-              <div className="row">
-                <input
-                  type="password"
-                  placeholder="sk-ant-…"
-                  style={{ maxWidth: 320, border: '1px solid var(--line)', borderRadius: 8, padding: '8px 10px' }}
-                  value={keyDraft}
-                  onChange={(e) => setKeyDraft(e.target.value)}
-                />
-                <button className="primary" disabled={!keyDraft.trim()}
-                        onClick={() => saveSettings({ anthropic_key: keyDraft.trim() })}>
-                  Save key
-                </button>
-                {settings.has_workspace_key && (
-                  <button className="linklike" onClick={() => saveSettings({ anthropic_key: '' })}>
-                    remove key
-                  </button>
+          <>
+            <p className="hint" style={{ marginTop: 10 }}>
+              One AI backend serves the whole tool — the same model powers ProcessIQ's
+              modelling agent, the co-pilot and DiagramIQ's notes analysis. Changing it
+              here changes it everywhere.
+            </p>
+            <AiProviderPanel onLoaded={setSharedAi} />
+
+            <details style={{ marginTop: 12 }}>
+              <summary className="hint" style={{ cursor: 'pointer' }}>
+                Advanced — DiagramIQ-only override
+              </summary>
+              <div className="filter-panel" style={{ marginTop: 10 }}>
+                <div className="filter-group">
+                  <span className="filter-label">Notes-analysis engine</span>
+                  <div className="row">
+                    <select
+                      value={settings.provider}
+                      onChange={(e) => saveSettings({ provider: e.target.value })}
+                    >
+                      <option value="auto">Use the workspace AI model (recommended)</option>
+                      <option value="anthropic">Use the workspace AI model — force AI</option>
+                      <option value="ollama">Ollama (local, private)</option>
+                      <option value="rule-based">Rule-based only (no AI)</option>
+                    </select>
+                    <span className="chip">Ollama: {settings.ollama_reachable ? 'reachable ✓' : 'not running'}</span>
+                  </div>
+                  <p className="hint">
+                    Leave on <strong>Use the workspace AI model</strong> unless you need a
+                    local-only engine. Rule-based extracts steps but not dependencies,
+                    systems or decision gateways.
+                  </p>
+                </div>
+                {(settings.has_workspace_key || keyDraft) && (
+                  <div className="filter-group">
+                    <span className="filter-label">
+                      Legacy DiagramIQ-only Anthropic key — overrides the workspace AI above
+                    </span>
+                    <div className="row">
+                      <input
+                        type="password"
+                        placeholder="sk-ant-…"
+                        style={{ maxWidth: 320, border: '1px solid var(--line)', borderRadius: 8, padding: '8px 10px' }}
+                        value={keyDraft}
+                        onChange={(e) => setKeyDraft(e.target.value)}
+                      />
+                      <button className="primary" disabled={!keyDraft.trim()}
+                              onClick={() => saveSettings({ anthropic_key: keyDraft.trim() })}>
+                        Save key
+                      </button>
+                      {settings.has_workspace_key && (
+                        <button className="linklike" onClick={() => saveSettings({ anthropic_key: '' })}>
+                          remove key (fall back to the workspace AI)
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 )}
               </div>
-            </div>
-          </div>
+            </details>
+          </>
         )}
       </div>
 
