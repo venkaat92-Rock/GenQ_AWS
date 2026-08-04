@@ -44,6 +44,7 @@ FIXTURES_SAP = Path(__file__).parent.parent / "fixtures" / "sap"
 FIXTURES_O2C = Path(__file__).parent.parent / "fixtures" / "o2c"
 FIXTURES_FORD_P2P = Path(__file__).parent.parent / "fixtures" / "ford_p2p"
 STATIC_DIR = Path(__file__).parent / "static"
+LANDING_PAGE = Path(__file__).parent / "landing.html"
 
 app = FastAPI(title="GenQ", version="0.1.0")
 app.add_middleware(
@@ -836,10 +837,23 @@ app.include_router(_make_workflow_router(workspace))
 
 if STATIC_DIR.exists():
 
-    @app.get("/", include_in_schema=False)
-    def index():
+    def _spa():
         # index.html must never be cached — it points at the hashed asset bundles,
         # so a stale copy pins users to an old version of the app after a deploy.
         return FileResponse(STATIC_DIR / "index.html", headers={"Cache-Control": "no-cache"})
 
+    @app.get("/", include_in_schema=False)
+    def landing():
+        """Marketing landing page. Falls back to the app when it isn't shipped, so
+        a container built without landing.html still serves something useful."""
+        if LANDING_PAGE.exists():
+            return FileResponse(LANDING_PAGE, headers={"Cache-Control": "no-cache"})
+        return _spa()
+
+    @app.get("/app", include_in_schema=False)
+    def index():
+        return _spa()
+
+    # Mounted last: the exact routes above win, everything else (hashed /assets/*)
+    # is served straight from the built bundle.
     app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="ui")
