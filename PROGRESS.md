@@ -691,3 +691,63 @@ and the "In plain English … both work" transformation phrasing was unprofessio
   vs 38.9 days. Process & Variant Explorer at Fit zoom shows genuine spaghetti - dense
   criss-crossing dashed rework/back-edges between PO Approved, Goods Receipt, Invoice
   Received, and PO Changed, exactly the "many bottlenecks to find" the user asked for.
+
+## 2026-10-28 - "Improve" layer: Advisor, Signals, and the SME Interviewer
+
+Competitive input: reviewed Klarity (klarity.ai, product page titled "Within"), whose
+Discover/Structure/Improve platform was raised as a benchmark. Deliberate conclusion
+recorded here so it does not get re-litigated: Klarity reads a DIFFERENT SUBSTRATE
+(screen recording, SME interviews, documents) than we do (systems of record). Neither
+can produce the other's output, so this is not a parity exercise. We took the three
+ideas that survive the translation to an event-log product and refused the fourth.
+
+TAKEN:
+- mining/advisor.py - ranked, costed improvement opportunities over numbers L4 already
+  computes (worst hand-off, rework concentration, conformance penalty, variant sprawl).
+  Two rules make it honest: labour value and cycle-time value are never merged into one
+  figure (recovering 10 days of calendar time != saving 10 days of work), and every
+  opportunity carries `based_on` + `evidence` so a sceptic can re-derive it by hand.
+  Assumptions (hourly rate, hours per manual touch) are caller-supplied defaults, echoed
+  back on every response and editable in the UI - they are assumptions, not measurements.
+- mining/signals.py - drift detection against a human-captured baseline snapshot. Fires
+  only above a 10% threshold (a noisy monitor gets muted, and a muted monitor is worse
+  than none); knows which direction is bad per metric, so a conformance DROP is `warn`
+  while a rise is `info`. Structural drift (an activity appeared/vanished) is reported
+  separately and points the reviewer at the MAPPING, not the process - per S1.1 that is
+  the silent-semantic-error case. Baseline stored per workspace, attributable.
+- modelling/interviewer.py - the S4 confirmation step as a short interview instead of a
+  radio-button form. A form cannot hold "it depends - for services POs we...", so that
+  reasoning got flattened into a wrong answer. THE INTERVIEWER NEVER WRITES THE ANSWER:
+  it returns a proposal, the human presses "Use this answer", and the existing
+  /api/mapping/answers gate still does the recording. A model answer outside the offered
+  options is discarded rather than accepted (test_an_invented_option_is_refused).
+  Degrades to the plain form when no LLM is configured.
+
+REFUSED: Klarity's "AI Companion" (continuous screen recording). Desktop agent on every
+employee machine, consent/works-council exposure, large build, and it contradicts the
+mid-market "minimal rollout" thesis. Logged so it is not revisited casually.
+
+UI/UX placement: new "Improve" step in the ProcessIQ nav, between Dashboard and Ask.
+Dashboard answers "what is happening"; Improve answers "what do I do about it" and
+"what changed since I last looked". Opportunities and Signals share one page rather
+than two nav items - an opportunity and the drift that created it are one conversation.
+The Interviewer is NOT a new page: it opens inline under the question it settles, on
+Mapping review, where the reviewer is already blocked.
+
+API: POST /api/mapping/interview, GET /api/analysis/advisor, GET /api/signals,
+POST /api/signals/baseline. New storage helpers load/save_signal_baseline.
+
+Tests: 17 new in tests/test_advisor_signals_interview.py, all green. The load-bearing
+ones are the honesty assertions, not the arithmetic: labour/cycle never merged, every
+opportunity cites its basis, signals silent below threshold, structural drift names the
+mapping, and the interviewer refuses an invented option. Full suite: 102 passed.
+Two PRE-EXISTING failures (test_connectors.py::test_sqlite_live_extraction_feeds_the_agent,
+test_live_api.py::test_servicenow_jira_salesforce_odata) - verified by stashing all of
+this work and re-running: they fail identically on a clean checkout. They need a DuckDB
+SQLite extension this sandbox cannot fetch. NOT introduced here, still outstanding.
+
+Open questions:
+- The Advisor prices rework via hours_per_touch, which is a guess until an SME sets it.
+  Worth capturing per-workspace rather than per-request.
+- Signals compare against ONE baseline. A rolling window would catch slow drift that a
+  single frozen point misses.
