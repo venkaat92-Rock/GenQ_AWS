@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
+import Interviewer from '../components/Interviewer'
 
 interface Activity {
   name: string
@@ -41,6 +42,7 @@ export default function MappingPage(props: { onMaterialized: () => void }) {
   const [pendingAnswers, setPendingAnswers] = useState<Record<string, string>>({})
   const [reviewer, setReviewer] = useState('')
   const [materialized, setMaterialized] = useState<{ events: number; cases: number } | null>(null)
+  const [interviewing, setInterviewing] = useState<string | null>(null) // question id
   const [editingSql, setEditingSql] = useState<string | null>(null) // activity name
   const [sqlDraft, setSqlDraft] = useState('')
   const [sqlEditor, setSqlEditor] = useState('')
@@ -168,6 +170,10 @@ export default function MappingPage(props: { onMaterialized: () => void }) {
       {unanswered.length > 0 && (
         <div className="card">
           <h3>Decisions required ({unanswered.length})</h3>
+          <p className="hint" style={{ marginTop: -4, marginBottom: 12 }}>
+            Pick an option, or talk it through with the agent if the real answer is
+            “it depends”. Nothing is recorded until you submit.
+          </p>
           {unanswered.map((q) => (
             <div className="question" key={q.id}>
               <div className="q">{q.question}</div>
@@ -183,6 +189,25 @@ export default function MappingPage(props: { onMaterialized: () => void }) {
                   {option}
                 </label>
               ))}
+              {pendingAnswers[q.id] && !q.options.includes(pendingAnswers[q.id]) && (
+                <p className="hint">Recorded from the interview: “{pendingAnswers[q.id]}”</p>
+              )}
+              <button
+                className="ghost"
+                style={{ marginTop: 8 }}
+                onClick={() => setInterviewing(interviewing === q.id ? null : q.id)}
+              >
+                {interviewing === q.id ? 'Close the interview' : "Not sure? Talk it through"}
+              </button>
+              {interviewing === q.id && (
+                <Interviewer
+                  questionId={q.id}
+                  onAccept={(answer) => {
+                    setPendingAnswers({ ...pendingAnswers, [q.id]: answer })
+                    setInterviewing(null)
+                  }}
+                />
+              )}
             </div>
           ))}
           <button className="primary" onClick={submitAnswers} disabled={busy || !allAnswered}>

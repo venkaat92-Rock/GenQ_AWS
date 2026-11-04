@@ -31,10 +31,14 @@ from engine.db import EventLogStore, safe_table_name
 from mining.cases import case_table, to_records
 from mining.conformance import conformance
 from mining.dfg import discover_dfg
+from mining.advisor import Assumptions, advisor_report
 from mining.insights import generate_insights
+from mining.signals import detect_signals, snapshot
 from mining.metrics import bottlenecks, rework, throughput
 from mining.variants import variant_analysis
 from modelling.agent import ModellingAgent
+from modelling.interviewer import available as interviewer_available
+from modelling.interviewer import interview_turn, opening
 from api.ai import workspace_llm
 from modelling.materialize import materialize
 from modelling.priors import CASE_GRANULARITY_QID
@@ -361,6 +365,33 @@ def answer_questions(body: AnswersIn, ws: dict = Depends(workspace)):
     return spec.to_dict()
 
 
+class InterviewIn(BaseModel):
+    question_id: str
+    message: str | None = None
+    history: list[dict] = []
+
+
+@app.post("/api/mapping/interview")
+def mapping_interview(body: InterviewIn, ws: dict = Depends(workspace)):
+    """One exchange of the SME interview that settles an open question (§4).
+
+    This endpoint only ever PROPOSES an answer. Recording it still goes through
+    /api/mapping/answers, so the human confirmation gate is unchanged.
+    """
+    spec = storage.load_spec(ws)
+    if spec is None:
+        raise HTTPException(404, "no mapping drafted yet")
+    if spec.status == "confirmed":
+        raise HTTPException(409, "mapping already confirmed — draft a new version to change it")
+    llm = workspace_llm(ws)
+    try:
+        turn = (opening(spec, body.question_id) if not body.message
+                else interview_turn(spec, body.question_id, body.history, body.message, llm))
+    except KeyError as exc:
+        raise HTTPException(400, str(exc))
+    return {**turn.to_dict(), "ai_available": interviewer_available(llm)}
+
+
 class SqlEditIn(BaseModel):
     activity: str
     sql: str
@@ -568,6 +599,58 @@ def analysis_insights(ws: dict = Depends(workspace), f: Filters = Depends(filter
     df, applied = _filtered_log(ws, f)
     reference, _ = _reference_for(ws, df)
     return {"insights": generate_insights(df, reference), "filters_applied": applied}
+
+
+# ---- Advisor: ranked, costed improvement opportunities ------------------------------
+
+
+@app.get("/api/analysis/advisor")
+def analysis_advisor(
+    hourly_rate: float = 65.0,
+    hours_per_touch: float = 0.5,
+    currency: str = "EUR",
+    ws: dict = Depends(workspace),
+    f: Filters = Depends(filter_params),
+):
+    """Opportunities ranked by estimated value. Assumptions are echoed back so the
+    UI can show what the figures rest on and let an SME correct them."""
+    df, applied = _filtered_log(ws, f)
+    reference, _ = _reference_for(ws, df)
+    report = advisor_report(df, reference, Assumptions(hourly_rate, hours_per_touch, currency))
+    return {**report, "filters_applied": applied}
+
+
+# ---- Signals: drift against a saved baseline ----------------------------------------
+
+
+class BaselineIn(BaseModel):
+    captured_by: str
+
+
+@app.get("/api/signals")
+def get_signals(ws: dict = Depends(workspace)):
+    with EventLogStore(ws["db_path"]) as store:
+        df = _event_log(store)
+    reference, _ = _reference_for(ws, df)
+    current = snapshot(df, reference)
+    baseline = storage.load_signal_baseline(ws)
+    return {
+        "baseline": baseline,
+        "current": current,
+        "signals": detect_signals(baseline, current),
+    }
+
+
+@app.post("/api/signals/baseline")
+def capture_signal_baseline(body: BaselineIn, ws: dict = Depends(workspace)):
+    """Freeze today's numbers as the comparison point for future drift."""
+    if not body.captured_by.strip():
+        raise HTTPException(400, "captured_by is required — baselines are attributable")
+    with EventLogStore(ws["db_path"]) as store:
+        df = _event_log(store)
+    reference, _ = _reference_for(ws, df)
+    saved = storage.save_signal_baseline(ws, snapshot(df, reference), body.captured_by.strip())
+    return {"baseline": saved, "signals": []}
 
 
 # ---- SME reference process (Signavio-style conformance target) ----------------------

@@ -100,6 +100,20 @@ def save_reference(workspace: dict, activities: list[str], updated_by: str) -> d
     return record
 
 
+def load_signal_baseline(workspace: dict) -> dict | None:
+    """The saved metric snapshot that drift Signals compare against (mining/signals.py)."""
+    path = workspace["dir"] / "signal_baseline.json"
+    if path.exists():
+        return json.loads(path.read_text(encoding="utf-8"))
+    return None
+
+
+def save_signal_baseline(workspace: dict, snapshot: dict, captured_by: str) -> dict:
+    record = {**snapshot, "captured_by": captured_by}
+    _write_json(workspace["dir"] / "signal_baseline.json", record)
+    return record
+
+
 def load_connections(workspace: dict) -> list[dict]:
     path = workspace["dir"] / "connections.json"
     if path.exists():

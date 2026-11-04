@@ -7,6 +7,7 @@ import DataPage from './pages/Data'
 import MappingPage from './pages/Mapping'
 import DataLoadPage from './pages/DataLoad'
 import DashboardPage from './pages/Dashboard'
+import ImprovePage from './pages/Improve'
 import AskPage from './pages/Ask'
 import DiagramStudioPage from './pages/DiagramStudio'
 import MembersPage from './pages/Members'
@@ -15,7 +16,7 @@ import DiagramReportPage from './pages/DiagramReport'
 import WorkflowAutomationPage from './pages/WorkflowAutomation'
 
 export type Tab =
-  | 'home' | 'data' | 'mapping' | 'dataload' | 'dashboard' | 'ask' | 'studio'
+  | 'home' | 'data' | 'mapping' | 'dataload' | 'dashboard' | 'improve' | 'ask' | 'studio'
   | 'members' | 'dictionary' | 'diagramreport' | 'automation'
 
 const PROCESS_STEPS: { id: Tab; label: string }[] = [
@@ -23,6 +24,7 @@ const PROCESS_STEPS: { id: Tab; label: string }[] = [
   { id: 'mapping', label: 'Mapping review' },
   { id: 'dataload', label: 'Data load' },
   { id: 'dashboard', label: 'Dashboard' },
+  { id: 'improve', label: 'Improve' },
   { id: 'ask', label: 'Ask' },
   { id: 'members', label: 'Members' },
 ]
@@ -36,7 +38,7 @@ const DIAGRAM_STEPS: { id: Tab; label: string }[] = [
 ]
 
 // pages where the co-pilot dock is available (ProcessIQ offering)
-const COPILOT_TABS: Tab[] = ['data', 'mapping', 'dataload', 'dashboard']
+const COPILOT_TABS: Tab[] = ['data', 'mapping', 'dataload', 'dashboard', 'improve']
 
 export default function App() {
   const [connected, setConnected] = useState(!!getApiKey())
@@ -115,6 +117,7 @@ export default function App() {
               />
             )}
             {tab === 'dashboard' && <DashboardPage />}
+            {tab === 'improve' && <ImprovePage />}
             {tab === 'ask' && <AskPage />}
           </>
         )}
