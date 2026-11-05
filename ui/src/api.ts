@@ -60,3 +60,10 @@ export async function uploadFile(file: File, table?: string) {
   if (table) form.append('table', table)
   return api('/api/sources/upload', { method: 'POST', body: form })
 }
+
+export async function uploadDocument(file: File, uploadedBy?: string) {
+  const form = new FormData()
+  form.append('file', file)
+  if (uploadedBy) form.append('uploaded_by', uploadedBy)
+  return api('/api/documents', { method: 'POST', body: form })
+}

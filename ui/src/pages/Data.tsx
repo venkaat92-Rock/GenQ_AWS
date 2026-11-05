@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, getApiKey, uploadFile } from '../api'
+import ContextDocuments from '../components/ContextDocuments'
 
 type Schema = Record<string, { columns: { name: string; type: string }[]; row_count: number }>
 
@@ -432,6 +433,8 @@ export default function DataPage(props: { onContinue: () => void }) {
           </div>
         </details>
       </div>
+
+      <ContextDocuments />
 
       {tables.length > 0 && (
         <div className="card">

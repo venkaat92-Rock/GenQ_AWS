@@ -114,6 +114,19 @@ def save_signal_baseline(workspace: dict, snapshot: dict, captured_by: str) -> d
     return record
 
 
+def load_documents(workspace: dict) -> list[dict]:
+    """Context documents (SOPs etc.) uploaded for this workspace. Extracted text is
+    stored, the original binary is not — a re-read means a re-upload."""
+    path = workspace["dir"] / "documents.json"
+    if path.exists():
+        return json.loads(path.read_text(encoding="utf-8"))
+    return []
+
+
+def save_documents(workspace: dict, documents: list[dict]) -> None:
+    _write_json(workspace["dir"] / "documents.json", documents)
+
+
 def load_connections(workspace: dict) -> list[dict]:
     path = workspace["dir"] / "connections.json"
     if path.exists():

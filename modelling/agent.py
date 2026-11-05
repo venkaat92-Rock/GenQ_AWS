@@ -33,11 +33,33 @@ Improve the draft: sharpen rationales in business language, adjust confidence le
 NEVER change the `sql` fields. Respond with ONLY the full spec as valid JSON matching
 the draft's structure exactly."""
 
+_DOCUMENT_CLAUSE = """
+
+You are ALSO given (3) context documents the customer uploaded — SOPs, work
+instructions, screenshots. These say how the process is SUPPOSED to run; the schema
+says what the system actually recorded. They are different kinds of evidence and you
+must not blur them:
+
+- Use the documents to explain codes and conditions the schema alone cannot reveal,
+  and to sharpen rationales into the customer's own vocabulary.
+- When a choice comes from a document, SAY SO in its rationale, naming the file:
+  e.g. "per 'AP SOP v3.docx', invoices are blocked above a 2% price variance".
+- Where a document DISAGREES with the data (it describes a step the tables do not
+  show, or forbids something the data clearly does), do NOT pick a side. Add an
+  open_question stating both, so a human decides. A document is a claim about the
+  process, not proof of it.
+- A document may be out of date, aspirational, or about a different entity. Never
+  raise a confidence level on a document's word alone."""
+
 
 class ModellingAgent:
-    def __init__(self, store: EventLogStore, llm: LLMProvider | None = None):
+    def __init__(self, store: EventLogStore, llm: LLMProvider | None = None,
+                 documents: list | None = None):
         self._store = store
         self._llm = llm
+        # Optional context documents (extraction/documents.ContextDocument). The agent
+        # behaves exactly as it did before when this is empty — documents never gate a draft.
+        self._documents = documents or []
 
     def draft(self, process: str = "auto") -> MappingSpec:
         schema = self._store.schema_summary()
@@ -60,8 +82,13 @@ class ModellingAgent:
                 f"found: {sorted(schema)}"
             )
 
+        readable = [d for d in self._documents if getattr(d, "status", "") == "read"]
         if self._llm is not None:
-            spec = self._refine_with_llm(spec, schema)
+            spec = self._refine_with_llm(spec, schema, readable)
+        elif readable:
+            # Be explicit rather than letting an upload look like it was used.
+            spec.notes = (spec.notes + f" ({len(readable)} context document(s) uploaded but "
+                          "not read: no AI model is configured.)").strip()
 
         return self._enforce_escalation(spec, schema)
 
@@ -88,11 +115,19 @@ class ModellingAgent:
 
     # ---- internals -----------------------------------------------------------------
 
-    def _refine_with_llm(self, spec: MappingSpec, schema: dict) -> MappingSpec:
+    def _refine_with_llm(self, spec: MappingSpec, schema: dict,
+                         documents: list | None = None) -> MappingSpec:
+        documents = documents or []
         try:
+            from extraction.documents import corpus_for_prompt
+
+            corpus = corpus_for_prompt(documents) if documents else ""
+            payload = {"schema": schema, "draft_spec": spec.to_dict()}
+            if corpus:
+                payload["context_documents"] = corpus
             raw = self._llm.complete(
-                _SYSTEM_PROMPT,
-                json.dumps({"schema": schema, "draft_spec": spec.to_dict()}, default=str),
+                _SYSTEM_PROMPT + (_DOCUMENT_CLAUSE if corpus else ""),
+                json.dumps(payload, default=str),
             )
             raw = raw.strip().removeprefix("```json").removeprefix("```").removesuffix("```")
             refined = MappingSpec.from_dict(json.loads(raw))
@@ -102,7 +137,13 @@ class ModellingAgent:
             for a in refined.activities:
                 a.sql, a.sql_explanation = by_name[a.name]
             refined.attributes = spec.attributes
-            refined.notes = (refined.notes + " (LLM-refined draft.)").strip()
+            # Audit trail: which documents actually fed this version (§1.6).
+            refined.documents_considered = [d.filename for d in documents
+                                            if getattr(d, "status", "") == "read"]
+            cited = (f" Context documents used: "
+                     f"{', '.join(refined.documents_considered)}."
+                     if refined.documents_considered else "")
+            refined.notes = (refined.notes + " (LLM-refined draft.)" + cited).strip()
             return refined
         except Exception as exc:  # any LLM failure -> deterministic draft still ships
             spec.notes = (spec.notes + f" (LLM refinement unavailable: {exc})").strip()

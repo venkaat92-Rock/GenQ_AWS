@@ -787,3 +787,50 @@ sandbox cannot fetch).
 Open question: recognition language is hard-coded en-GB. Fine for the current
 deployment, wrong the moment a non-English SME uses it - worth taking from the
 browser locale or a workspace setting.
+
+## 2026-11-05 (later) - Optional SOP / context-document upload at data load
+
+Closes the one real gap identified in the Klarity comparison: their Discover phase
+ingests documents, we only read schemas. A schema says what the system RECORDED; an
+SOP says WHY. "AP blocks the invoice above a 2% price variance" explains a status
+code no amount of staring at RBKP will reveal.
+
+- extraction/documents.py - one entry point, extract(), for .txt/.md, .docx (including
+  table cells, where SOPs actually keep their content), .pdf, .xlsx/.csv and images.
+  Images and image-only PDFs (scans) are transcribed by a vision model AT UPLOAD, so
+  everything downstream handles uniform text.
+- modelling/llm.py gains complete_with_image(). Vision rides the same Messages shape,
+  so it works unchanged on Anthropic, Vertex and Bedrock - no second provider path.
+- MappingSpec.documents_considered records which documents fed a version (S1.6 audit
+  trail). Old specs without the field still load.
+- Agent: a _DOCUMENT_CLAUSE is appended to the system prompt ONLY when a readable
+  corpus exists. It tells the model to cite the file in the rationale when a choice
+  came from a document, and - the important one - to raise an open_question rather
+  than pick a side when a document DISAGREES with the data. A document is a claim
+  about the process, not proof of it; it may be stale, aspirational, or about another
+  entity, so it may never raise a confidence level on its own word.
+- API: GET/POST/DELETE /api/documents. UI: a "Context documents (optional)" card on
+  the Data page, between source upload and staged tables.
+
+The discipline that shaped this, per S1.1: A FILE WE COULD NOT READ MUST NEVER LOOK
+LIKE A FILE WE READ AND IGNORED. Unreadable uploads are STORED with a plain-language
+reason rather than rejected; status is read / needs_ai / unreadable, shown per row;
+an image uploaded with no model configured says so instead of vanishing; and when
+documents exist but no LLM does, the draft's notes say they were not read. Caps
+(12k/doc, 40k total) are enforced exactly and surfaced as "(capped)".
+
+A test caught a real bug while writing it: corpus_for_prompt overshot its own total
+cap, because the "\n\n" joins and the " ..." marker were not counted. Fixed with a
+_clip() helper that fits the ellipsis INSIDE the budget, and the test was tightened
+to the real promise rather than relaxed to the buggy behaviour.
+
+26 new tests (tests/test_context_documents.py), suite 132 passed. Same two
+PRE-EXISTING failures (test_connectors, test_live_api - DuckDB SQLite extension the
+sandbox cannot fetch).
+
+Open questions:
+- Original bytes are NOT retained, only extracted text, so a needs_ai document cannot
+  be re-read after a model is configured - it must be re-uploaded. Storing originals
+  on EFS would fix that at a storage cost; deferred deliberately.
+- Vision transcription happens once at upload. If someone swaps to a better model
+  later, existing transcriptions are not refreshed.

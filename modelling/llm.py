@@ -38,6 +38,27 @@ class AnthropicLLM:
         )
         return "".join(block.text for block in response.content if block.type == "text")
 
+    def complete_with_image(self, system: str, user: str, image: bytes,
+                            media_type: str = "image/png") -> str:
+        """Same call with an image attached — used to read screenshots and scanned
+        SOPs (extraction/documents.py). Vision rides the same Messages shape, so it
+        works unchanged on Bedrock and Vertex; callers must still treat it as
+        optional, since not every configured model accepts images."""
+        import base64
+
+        response = self._client.messages.create(
+            model=self._model,
+            max_tokens=4096,
+            system=system,
+            messages=[{"role": "user", "content": [
+                {"type": "image", "source": {
+                    "type": "base64", "media_type": media_type,
+                    "data": base64.b64encode(image).decode("ascii")}},
+                {"type": "text", "text": user},
+            ]}],
+        )
+        return "".join(block.text for block in response.content if block.type == "text")
+
 
 def client_for_settings(settings: dict):
     """Build the SDK client for the configured provider, or raise with a clear
