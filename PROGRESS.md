@@ -751,3 +751,39 @@ Open questions:
   Worth capturing per-workspace rather than per-request.
 - Signals compare against ONE baseline. A rolling window would catch slow drift that a
   single frozen point misses.
+
+## 2026-11-05 - Voice in the SME interview (speak the question, dictate the answer)
+
+The interview landed and works, but reading a dense modelling question off a screen
+and typing a considered answer is the slowest possible way for a busy SME to give us
+the one thing we actually need. Added speech both directions. Voice is ADDITIVE: the
+typed interview is unchanged and fully usable on its own, which matters because
+recognition support is Chromium/Safari only.
+
+- ui/src/lib/voice.ts - thin wrapper over the Web Speech API. Chosen over Polly/
+  Transcribe deliberately: no backend route, no audio leaves the browser, no
+  per-minute cost, nothing to configure per deployment. Every entry point is
+  capability-checked (canSpeak/canListen) so an unsupported browser silently gets
+  the text-only panel rather than a broken button.
+- Output: each new agent turn is read aloud once (tracked by index in a ref, so a
+  re-render cannot re-speak it). Mute toggle persisted in localStorage; a Repeat
+  control and a per-message replay button on hover. Rate 0.98 - slightly under
+  default because these questions are dense and unfamiliar.
+- Input: continuous recognition with interim results shown live in the same text
+  box, so the SME watches the words land and can correct by typing. Final phrases
+  append rather than replace, so someone can think mid-sentence without losing what
+  they already said.
+- Two feedback traps handled explicitly: starting the mic cancels any speech (or
+  the mic transcribes our own voice), and unmounting the panel stops both.
+- Error text is human, not an error code: a refused mic permission says to allow it
+  in the address bar; "no-speech" invites another try; a user-initiated abort is
+  not surfaced at all.
+- prefers-reduced-motion disables the listening pulse.
+
+No Python touched. UI build clean; suite still 106 passed with the same two
+PRE-EXISTING failures (test_connectors, test_live_api - DuckDB SQLite extension the
+sandbox cannot fetch).
+
+Open question: recognition language is hard-coded en-GB. Fine for the current
+deployment, wrong the moment a non-English SME uses it - worth taking from the
+browser locale or a workspace setting.
