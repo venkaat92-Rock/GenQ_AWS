@@ -325,6 +325,20 @@ main.with-copilot { margin-right: 320px; }
 .iv-msg.sme .bubble { background: var(--accent); color: #fff; border-bottom-right-radius: 3px; }
 .iv-msg.agent { align-self: flex-start; max-width: 85%; }
 .iv-msg.agent .bubble { background: #f5f7fa; border: 1px solid var(--line); border-bottom-left-radius: 3px; }
+
+/* voice controls — additive: the panel is fully usable with none of these */
+.iv-bar { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.iv-icon { display: inline-flex; align-items: center; gap: 6px; background: none; border: 1px solid var(--line); border-radius: 6px; padding: 4px 10px; font-size: 12px; font-family: inherit; color: var(--muted); cursor: pointer; }
+.iv-icon:hover { border-color: var(--accent); color: var(--accent); }
+.iv-icon.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.iv-msg { position: relative; }
+.iv-replay { position: absolute; top: 2px; right: -4px; background: none; border: none; cursor: pointer; font-size: 12px; opacity: 0; transition: opacity 0.15s; padding: 2px; }
+.iv-msg.agent:hover .iv-replay, .iv-replay:focus-visible { opacity: 0.75; }
+.iv-mic { flex-shrink: 0; width: 38px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); font-size: 15px; cursor: pointer; line-height: 1; }
+.iv-mic:hover { border-color: var(--accent); }
+.iv-mic.live { background: var(--bad-bg, #fdecea); border-color: var(--bad, #b3452b); animation: iv-pulse 1.3s ease-in-out infinite; }
+@keyframes iv-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+@media (prefers-reduced-motion: reduce) { .iv-mic.live { animation: none; } }
 .iv-proposal { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin: 0 14px 12px; padding: 11px 14px; background: var(--accent-soft); border-radius: 8px; font-size: 13px; }
 .iv-input { display: flex; gap: 8px; padding: 12px 14px; border-top: 1px solid var(--line); }
 .iv-input input { flex: 1; }
