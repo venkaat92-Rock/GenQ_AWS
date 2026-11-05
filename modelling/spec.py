@@ -72,6 +72,7 @@ class MappingSpec:
     created_at: str = ""
     confirmed_at: str | None = None
     generated_sql: str = ""             # full materialization SQL, stored for audit (§1.6)
+    documents_considered: list[str] = field(default_factory=list)  # SOPs that informed this draft
     notes: str = ""
 
     def __post_init__(self):
@@ -139,6 +140,7 @@ class MappingSpec:
             created_at=data.get("created_at", ""),
             confirmed_at=data.get("confirmed_at"),
             generated_sql=data.get("generated_sql", ""),
+            documents_considered=list(data.get("documents_considered", [])),
             notes=data.get("notes", ""),
         )
 

@@ -21,6 +21,7 @@ import uuid
 import os
 
 from api import storage
+from extraction.documents import ContextDocument, extract
 from api.dataload import build_dataload, copilot_answer, load_runs, record_run
 from api.scheduler import load_schedule, run_due_schedules, save_schedule, start_scheduler
 from api.datamodel import build_datamodel, rederive, save_datamodel_edits
@@ -165,6 +166,50 @@ def list_sources(ws: dict = Depends(workspace)):
 
 
 # ---- ready-made process connectors (L1) ---------------------------------------------
+
+
+# ---- context documents (optional SOPs, work instructions, screenshots) --------------
+
+
+def _documents_for(ws: dict) -> list[ContextDocument]:
+    return [ContextDocument(**d) for d in storage.load_documents(ws)]
+
+
+@app.get("/api/documents")
+def list_documents(ws: dict = Depends(workspace)):
+    """Summaries only — the extracted body is for the agent, not the list view."""
+    return {"documents": [d.summary() for d in _documents_for(ws)]}
+
+
+@app.post("/api/documents")
+async def upload_document(
+    ws: dict = Depends(workspace),
+    file: UploadFile = File(...),
+    uploaded_by: str = Form(default=""),
+):
+    """Optional. A document never gates a mapping — it only gives the agent context
+    the schema cannot carry. Unreadable files are STORED with a reason rather than
+    rejected, so an upload that is not informing the mapping is visible as such."""
+    raw = await file.read()
+    if len(raw) > 20 * 1024 * 1024:
+        raise HTTPException(400, "file is larger than 20 MB — upload the relevant extract instead")
+    name = Path(file.filename or "document").name
+    doc = extract(uuid.uuid4().hex[:12], name, raw, llm=workspace_llm(ws),
+                  uploaded_by=uploaded_by.strip())
+    documents = storage.load_documents(ws)
+    documents.append(doc.to_dict())
+    storage.save_documents(ws, documents)
+    return doc.summary()
+
+
+@app.delete("/api/documents/{doc_id}")
+def delete_document(doc_id: str, ws: dict = Depends(workspace)):
+    documents = storage.load_documents(ws)
+    remaining = [d for d in documents if d.get("id") != doc_id]
+    if len(remaining) == len(documents):
+        raise HTTPException(404, "no such document")
+    storage.save_documents(ws, remaining)
+    return {"deleted": doc_id, "remaining": len(remaining)}
 
 
 @app.get("/api/connectors")
@@ -312,7 +357,7 @@ def delete_connection(name: str, ws: dict = Depends(workspace)):
 def draft_mapping(ws: dict = Depends(workspace)):
     with EventLogStore(ws["db_path"]) as store:
         try:
-            spec = ModellingAgent(store, workspace_llm(ws)).draft()
+            spec = ModellingAgent(store, workspace_llm(ws), _documents_for(ws)).draft()
         except ValueError as exc:
             raise HTTPException(400, str(exc))
     storage.save_spec(ws, spec)
